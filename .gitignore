@@ -5,6 +5,11 @@ node_modules/
 dist/
 dist-ssr/
 
+# Environment variables (keep API keys private)
+.env
+.env.*
+!.env.example
+
 # Local env & logs
 *.local
 *.log

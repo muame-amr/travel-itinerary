@@ -12,28 +12,53 @@ interface MapViewProps {
   allVisibleItems: ItineraryItem[];
 }
 
-type TileStyle = 'topo' | 'street' | 'satellite';
+const CARTO_API_KEY = (import.meta.env.VITE_CARTO_API_KEY || '').trim();
+
+type TileStyle = 'carto_voyager' | 'carto_light' | 'topo' | 'street' | 'satellite';
 
 const TILE_URLS: Record<
   TileStyle,
   { url: string; label: string; attribution: string }
 > = {
+  carto_voyager: {
+    url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${
+      CARTO_API_KEY ? `?api_key=${encodeURIComponent(CARTO_API_KEY)}` : ''
+    }`,
+    label: 'CARTO Voyager',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
+  carto_light: {
+    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${
+      CARTO_API_KEY ? `?api_key=${encodeURIComponent(CARTO_API_KEY)}` : ''
+    }`,
+    label: 'CARTO Light',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  },
   topo: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
     label: 'Topo Map',
-    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+    attribution:
+      'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase',
   },
   street: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
     label: 'Street Map',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
+    attribution:
+      'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN',
   },
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     label: 'Satellite',
-    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    attribution:
+      'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
   },
 };
+
+const AVAILABLE_STYLES: TileStyle[] = CARTO_API_KEY
+  ? ['carto_voyager', 'carto_light', 'topo', 'street', 'satellite']
+  : ['topo', 'street', 'satellite'];
 
 export const MapView: React.FC<MapViewProps> = ({
   dayGroups,
@@ -46,7 +71,9 @@ export const MapView: React.FC<MapViewProps> = ({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
-  const [tileStyle, setTileStyle] = useState<TileStyle>('topo');
+  const [tileStyle, setTileStyle] = useState<TileStyle>(
+    CARTO_API_KEY ? 'carto_voyager' : 'topo'
+  );
 
   const fitAllVisible = useCallback(() => {
     const map = mapRef.current;
@@ -282,8 +309,10 @@ export const MapView: React.FC<MapViewProps> = ({
       : undefined;
 
   const cycleTileStyle = () => {
-    const order: TileStyle[] = ['topo', 'street', 'satellite'];
-    const next = order[(order.indexOf(tileStyle) + 1) % order.length];
+    const next =
+      AVAILABLE_STYLES[
+        (AVAILABLE_STYLES.indexOf(tileStyle) + 1) % AVAILABLE_STYLES.length
+      ];
     setTileStyle(next);
   };
 
@@ -308,7 +337,7 @@ export const MapView: React.FC<MapViewProps> = ({
           type="button"
           onClick={cycleTileStyle}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/95 backdrop-blur-xs text-slate-700 hover:text-indigo-600 hover:bg-white shadow-md border border-slate-200/80 transition-all cursor-pointer"
-          title="Switch map style (Topo / Street / Satellite)"
+          title="Switch map style"
         >
           <Layers className="w-3.5 h-3.5" />
           Map: {TILE_URLS[tileStyle].label}
