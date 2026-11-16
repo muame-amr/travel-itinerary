@@ -12,28 +12,26 @@ interface MapViewProps {
   allVisibleItems: ItineraryItem[];
 }
 
-type TileStyle = 'voyager' | 'esri' | 'osm';
+type TileStyle = 'topo' | 'street' | 'satellite';
 
 const TILE_URLS: Record<
   TileStyle,
   { url: string; label: string; attribution: string }
 > = {
-  voyager: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    label: 'Voyager',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  topo: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    label: 'Topo Map',
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
   },
-  esri: {
+  street: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-    label: 'Esri Street',
-    attribution: 'Tiles &copy; Esri',
+    label: 'Street Map',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom',
   },
-  osm: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    label: 'OpenStreetMap',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    label: 'Satellite',
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
   },
 };
 
@@ -48,8 +46,7 @@ export const MapView: React.FC<MapViewProps> = ({
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
-  const [tileStyle, setTileStyle] = useState<TileStyle>('voyager');
-  const tileErrorCountRef = useRef<number>(0);
+  const [tileStyle, setTileStyle] = useState<TileStyle>('topo');
 
   const fitAllVisible = useCallback(() => {
     const map = mapRef.current;
@@ -79,7 +76,7 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [26.8721, 100.2335], // Default center on Yunnan (Lijiang/Dali/Kunming)
+      center: [26.8721, 100.2335],
       zoom: 7,
       zoomControl: false,
     });
@@ -91,14 +88,6 @@ export const MapView: React.FC<MapViewProps> = ({
       attribution: tileConfig.attribution,
       maxZoom: 19,
     }).addTo(map);
-
-    // Auto-fallback to Esri Street Map if primary tile server fails on user's network
-    tileLayer.on('tileerror', () => {
-      tileErrorCountRef.current += 1;
-      if (tileErrorCountRef.current === 4) {
-        setTileStyle((prev) => (prev === 'voyager' ? 'esri' : 'osm'));
-      }
-    });
 
     const routesLayer = L.layerGroup().addTo(map);
     const markersLayer = L.layerGroup().addTo(map);
@@ -127,7 +116,6 @@ export const MapView: React.FC<MapViewProps> = ({
   // Switch tile style
   useEffect(() => {
     if (!mapRef.current || !tileLayerRef.current) return;
-    tileErrorCountRef.current = 0;
     const cfg = TILE_URLS[tileStyle];
     tileLayerRef.current.setUrl(cfg.url);
   }, [tileStyle]);
@@ -294,7 +282,7 @@ export const MapView: React.FC<MapViewProps> = ({
       : undefined;
 
   const cycleTileStyle = () => {
-    const order: TileStyle[] = ['voyager', 'esri', 'osm'];
+    const order: TileStyle[] = ['topo', 'street', 'satellite'];
     const next = order[(order.indexOf(tileStyle) + 1) % order.length];
     setTileStyle(next);
   };
@@ -320,7 +308,7 @@ export const MapView: React.FC<MapViewProps> = ({
           type="button"
           onClick={cycleTileStyle}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/95 backdrop-blur-xs text-slate-700 hover:text-indigo-600 hover:bg-white shadow-md border border-slate-200/80 transition-all cursor-pointer"
-          title="Switch map tile provider (no API key needed)"
+          title="Switch map style (Topo / Street / Satellite)"
         >
           <Layers className="w-3.5 h-3.5" />
           Map: {TILE_URLS[tileStyle].label}
