@@ -33,9 +33,7 @@ export function App() {
   const [isCustomFile, setIsCustomFile] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<ViewMode>(() =>
-    typeof window !== 'undefined' && window.innerWidth < 768 ? 'timeline' : 'split'
-  );
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [selectedDay, setSelectedDay] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -369,15 +367,15 @@ export function App() {
       {/* Main Workspace Area */}
       <main className="flex-1 min-h-0 flex relative overflow-hidden">
         {viewMode === 'split' && (
-          <>
-            <div className="w-full md:w-[440px] lg:w-[510px] xl:w-[560px] h-full border-r border-slate-200 bg-slate-50/60 shrink-0 overflow-hidden">
+          <div className="flex flex-col-reverse md:flex-row w-full h-full overflow-hidden">
+            <div className="w-full md:w-[440px] lg:w-[510px] xl:w-[560px] h-[55%] md:h-full border-t md:border-t-0 md:border-r border-slate-200 bg-slate-50/60 shrink-0 overflow-hidden">
               <TimelineView
                 dayGroups={filteredDayGroups}
                 selectedItemId={selectedItemId}
                 onSelectItem={(item) => setSelectedItemId(item.id)}
               />
             </div>
-            <div className="hidden md:block flex-1 h-full overflow-hidden">
+            <div className="w-full h-[45%] md:h-full md:flex-1 overflow-hidden">
               <MapView
                 dayGroups={filteredDayGroups}
                 selectedItem={selectedItem}
@@ -385,7 +383,7 @@ export function App() {
                 allVisibleItems={allVisibleItems}
               />
             </div>
-          </>
+          </div>
         )}
 
         {viewMode === 'timeline' && (

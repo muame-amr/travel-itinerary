@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { Maximize2, Layers } from 'lucide-react';
 import { DayGroup, ItineraryItem } from '../types';
@@ -12,26 +12,28 @@ interface MapViewProps {
   allVisibleItems: ItineraryItem[];
 }
 
-type TileStyle = 'voyager' | 'osm' | 'light';
+type TileStyle = 'voyager' | 'esri' | 'osm';
 
-const TILE_URLS: Record<TileStyle, { url: string; label: string; attribution: string }> = {
+const TILE_URLS: Record<
+  TileStyle,
+  { url: string; label: string; attribution: string }
+> = {
   voyager: {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
     label: 'Voyager',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
   },
+  esri: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    label: 'Esri Street',
+    attribution: 'Tiles &copy; Esri',
+  },
   osm: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    label: 'Standard',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    label: 'OpenStreetMap',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  },
-  light: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    label: 'Minimal',
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
   },
 };
 
@@ -47,14 +49,38 @@ export const MapView: React.FC<MapViewProps> = ({
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routesLayerRef = useRef<L.LayerGroup | null>(null);
   const [tileStyle, setTileStyle] = useState<TileStyle>('voyager');
+  const tileErrorCountRef = useRef<number>(0);
+
+  const fitAllVisible = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    map.invalidateSize();
+
+    const coords: [number, number][] = [];
+    for (const group of dayGroups) {
+      for (const item of group.items) {
+        if (isValidLatLng(item.lat, item.lng)) {
+          coords.push([item.lat!, item.lng!]);
+        }
+      }
+    }
+
+    if (coords.length === 1) {
+      map.setView(coords[0], 14);
+    } else if (coords.length > 1) {
+      const bounds = L.latLngBounds(coords);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    }
+  }, [dayGroups]);
 
   // Initialize Leaflet map once
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      center: [35.6895, 139.6917],
-      zoom: 12,
+      center: [26.8721, 100.2335], // Default center on Yunnan (Lijiang/Dali/Kunming)
+      zoom: 7,
       zoomControl: false,
     });
 
@@ -66,6 +92,14 @@ export const MapView: React.FC<MapViewProps> = ({
       maxZoom: 19,
     }).addTo(map);
 
+    // Auto-fallback to Esri Street Map if primary tile server fails on user's network
+    tileLayer.on('tileerror', () => {
+      tileErrorCountRef.current += 1;
+      if (tileErrorCountRef.current === 4) {
+        setTileStyle((prev) => (prev === 'voyager' ? 'esri' : 'osm'));
+      }
+    });
+
     const routesLayer = L.layerGroup().addTo(map);
     const markersLayer = L.layerGroup().addTo(map);
 
@@ -74,11 +108,14 @@ export const MapView: React.FC<MapViewProps> = ({
     routesLayerRef.current = routesLayer;
     markersLayerRef.current = markersLayer;
 
-    // Handle container resize cleanly
     const resizeObserver = new ResizeObserver(() => {
       map.invalidateSize();
     });
     resizeObserver.observe(mapContainerRef.current);
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
 
     return () => {
       resizeObserver.disconnect();
@@ -90,6 +127,7 @@ export const MapView: React.FC<MapViewProps> = ({
   // Switch tile style
   useEffect(() => {
     if (!mapRef.current || !tileLayerRef.current) return;
+    tileErrorCountRef.current = 0;
     const cfg = TILE_URLS[tileStyle];
     tileLayerRef.current.setUrl(cfg.url);
   }, [tileStyle]);
@@ -109,23 +147,20 @@ export const MapView: React.FC<MapViewProps> = ({
         isValidLatLng(i.lat, i.lng)
       );
 
-      // Draw dashed route polyline connecting stops in this day
       if (validDayItems.length > 1) {
         const latlngs: L.LatLngExpression[] = validDayItems.map((i) => [
           i.lat!,
           i.lng!,
         ]);
 
-        // Subtle white halo line underneath for contrast
         L.polyline(latlngs, {
           color: '#ffffff',
           weight: 6,
-          opacity: 0.8,
+          opacity: 0.85,
           lineCap: 'round',
           lineJoin: 'round',
         }).addTo(routesLayer);
 
-        // Colored dashed route line
         L.polyline(latlngs, {
           color: group.color,
           weight: 3.5,
@@ -136,7 +171,6 @@ export const MapView: React.FC<MapViewProps> = ({
         }).addTo(routesLayer);
       }
 
-      // Draw numbered markers
       for (const item of validDayItems) {
         const isSelected = selectedItem?.id === item.id;
         const size = isSelected ? 38 : 30;
@@ -221,52 +255,31 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [dayGroups, selectedItem, onSelectItem]);
 
-  // Fit bounds when visible day groups change (and no specific item is being focused)
-  const fitAllVisible = () => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const coords: [number, number][] = [];
-    for (const group of dayGroups) {
-      for (const item of group.items) {
-        if (isValidLatLng(item.lat, item.lng)) {
-          coords.push([item.lat!, item.lng!]);
-        }
-      }
-    }
-
-    if (coords.length === 1) {
-      map.flyTo(coords[0], 15, { duration: 0.6 });
-    } else if (coords.length > 1) {
-      const bounds = L.latLngBounds(coords);
-      map.fitBounds(bounds, { padding: [55, 55], maxZoom: 15 });
-    }
-  };
-
-  // Auto-fit when day filter or items list changes
   const coordsKey = dayGroups
     .flatMap((g) => g.items.map((i) => `${i.id}:${i.lat ?? ''},${i.lng ?? ''}`))
     .join('|');
 
   useEffect(() => {
-    if (!selectedItem) {
-      fitAllVisible();
+    if (!selectedItem && coordsKey) {
+      const timer = setTimeout(() => {
+        fitAllVisible();
+      }, 60);
+      return () => clearTimeout(timer);
     }
-  }, [coordsKey]);
+  }, [coordsKey, fitAllVisible]);
 
-  // Fly to selected item when user clicks a place
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !selectedItem) return;
     if (isValidLatLng(selectedItem.lat, selectedItem.lng)) {
-      const targetZoom = Math.max(map.getZoom(), 14);
+      map.invalidateSize();
+      const targetZoom = Math.max(map.getZoom(), 13);
       map.flyTo([selectedItem.lat!, selectedItem.lng!], targetZoom, {
         duration: 0.65,
       });
     }
   }, [selectedItem]);
 
-  // Determine previous/next item navigation for the detail card
   const selectedIdx = selectedItem
     ? allVisibleItems.findIndex((i) => i.id === selectedItem.id)
     : -1;
@@ -274,12 +287,14 @@ export const MapView: React.FC<MapViewProps> = ({
   const hasNext = selectedIdx >= 0 && selectedIdx < allVisibleItems.length - 1;
 
   const prevItemInDay =
-    selectedItem && selectedIdx > 0 && allVisibleItems[selectedIdx - 1]?.day === selectedItem.day
+    selectedItem &&
+    selectedIdx > 0 &&
+    allVisibleItems[selectedIdx - 1]?.day === selectedItem.day
       ? allVisibleItems[selectedIdx - 1]
       : undefined;
 
   const cycleTileStyle = () => {
-    const order: TileStyle[] = ['voyager', 'osm', 'light'];
+    const order: TileStyle[] = ['voyager', 'esri', 'osm'];
     const next = order[(order.indexOf(tileStyle) + 1) % order.length];
     setTileStyle(next);
   };
@@ -289,7 +304,7 @@ export const MapView: React.FC<MapViewProps> = ({
       {/* Map Canvas */}
       <div ref={mapContainerRef} className="w-full h-full z-0" />
 
-      {/* Top-Left Map Controls: Fit All & Map Style */}
+      {/* Top-Left Map Controls */}
       <div className="absolute top-3 left-3 z-[400] flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -305,14 +320,14 @@ export const MapView: React.FC<MapViewProps> = ({
           type="button"
           onClick={cycleTileStyle}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white/95 backdrop-blur-xs text-slate-700 hover:text-indigo-600 hover:bg-white shadow-md border border-slate-200/80 transition-all cursor-pointer"
-          title="Switch map style"
+          title="Switch map tile provider (no API key needed)"
         >
           <Layers className="w-3.5 h-3.5" />
           Map: {TILE_URLS[tileStyle].label}
         </button>
       </div>
 
-      {/* Bottom-Left Day Route Legend (hidden on small screens when detail card is open) */}
+      {/* Bottom-Left Day Route Legend */}
       {dayGroups.length > 0 && (
         <div
           className={`absolute bottom-4 left-3 z-[400] bg-white/95 backdrop-blur-xs px-3 py-2 rounded-xl shadow-md border border-slate-200/80 flex flex-wrap items-center gap-3 max-w-xs sm:max-w-md ${
@@ -320,7 +335,10 @@ export const MapView: React.FC<MapViewProps> = ({
           }`}
         >
           {dayGroups.map((group) => (
-            <div key={group.day} className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+            <div
+              key={group.day}
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-700"
+            >
               <span
                 className="w-2.5 h-2.5 rounded-full shrink-0"
                 style={{ backgroundColor: group.color }}

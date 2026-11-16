@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={() => onViewModeChange('split')}
-          className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
             viewMode === 'split'
               ? 'bg-white text-indigo-600 shadow-xs'
               : 'text-slate-600 hover:text-slate-900'
