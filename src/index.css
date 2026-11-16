@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+.custom-itinerary-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
