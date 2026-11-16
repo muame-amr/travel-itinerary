@@ -16,9 +16,11 @@ const CARTO_API_KEY = (import.meta.env.VITE_CARTO_API_KEY || '').trim();
 
 type TileStyle = 'carto_voyager' | 'carto_light' | 'topo' | 'street' | 'satellite';
 
+const MAX_MAP_ZOOM = 14;
+
 const TILE_URLS: Record<
   TileStyle,
-  { url: string; label: string; attribution: string }
+  { url: string; label: string; attribution: string; maxNativeZoom: number }
 > = {
   carto_voyager: {
     url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${
@@ -27,6 +29,7 @@ const TILE_URLS: Record<
     label: 'CARTO Voyager',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxNativeZoom: 18,
   },
   carto_light: {
     url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${
@@ -35,24 +38,30 @@ const TILE_URLS: Record<
     label: 'CARTO Light',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    maxNativeZoom: 18,
   },
   topo: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
     label: 'Topo Map',
     attribution:
       'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase',
+    // Esri China topo tiles are native up to z=13 (z=14+ in Kunming returns "Map data not yet available")
+    maxNativeZoom: 13,
   },
   street: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
     label: 'Street Map',
     attribution:
       'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN',
+    // Esri China street tiles are native up to z=13
+    maxNativeZoom: 13,
   },
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     label: 'Satellite',
     attribution:
       'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye',
+    maxNativeZoom: 17,
   },
 };
 
@@ -91,10 +100,10 @@ export const MapView: React.FC<MapViewProps> = ({
     }
 
     if (coords.length === 1) {
-      map.setView(coords[0], 14);
+      map.setView(coords[0], 13);
     } else if (coords.length > 1) {
       const bounds = L.latLngBounds(coords);
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
     }
   }, [dayGroups]);
 
@@ -105,6 +114,8 @@ export const MapView: React.FC<MapViewProps> = ({
     const map = L.map(mapContainerRef.current, {
       center: [26.8721, 100.2335],
       zoom: 7,
+      minZoom: 3,
+      maxZoom: MAX_MAP_ZOOM,
       zoomControl: false,
     });
 
@@ -113,7 +124,8 @@ export const MapView: React.FC<MapViewProps> = ({
     const tileConfig = TILE_URLS[tileStyle];
     const tileLayer = L.tileLayer(tileConfig.url, {
       attribution: tileConfig.attribution,
-      maxZoom: 19,
+      maxNativeZoom: tileConfig.maxNativeZoom,
+      maxZoom: MAX_MAP_ZOOM,
     }).addTo(map);
 
     const routesLayer = L.layerGroup().addTo(map);
@@ -140,11 +152,23 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Switch tile style
+  // Switch tile style (recreate tile layer so maxNativeZoom updates cleanly)
   useEffect(() => {
-    if (!mapRef.current || !tileLayerRef.current) return;
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (tileLayerRef.current) {
+      map.removeLayer(tileLayerRef.current);
+    }
+
     const cfg = TILE_URLS[tileStyle];
-    tileLayerRef.current.setUrl(cfg.url);
+    const newLayer = L.tileLayer(cfg.url, {
+      attribution: cfg.attribution,
+      maxNativeZoom: cfg.maxNativeZoom,
+      maxZoom: MAX_MAP_ZOOM,
+    }).addTo(map);
+    newLayer.bringToBack();
+    tileLayerRef.current = newLayer;
   }, [tileStyle]);
 
   // Render markers and route lines
@@ -288,7 +312,7 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!map || !selectedItem) return;
     if (isValidLatLng(selectedItem.lat, selectedItem.lng)) {
       map.invalidateSize();
-      const targetZoom = Math.max(map.getZoom(), 13);
+      const targetZoom = Math.min(Math.max(map.getZoom(), 13), 13);
       map.flyTo([selectedItem.lat!, selectedItem.lng!], targetZoom, {
         duration: 0.65,
       });
